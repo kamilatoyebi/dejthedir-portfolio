@@ -76,8 +76,8 @@ h1,h2,h3{font-family:var(--slab);font-weight:400;line-height:1.1;margin:0}
 @media (prefers-reduced-motion:reduce){.tile{animation:none}}
 
 /* shared image frames and placeholders */
-.frame{display:block;aspect-ratio:4/5;overflow:hidden;background:var(--ink)}
-.frame img{width:100%;height:100%;object-fit:cover;display:block}
+.frame{display:flex;aspect-ratio:4/5;overflow:hidden;background:var(--ink);align-items:center;justify-content:center}
+.frame img{width:100%;height:100%;object-fit:contain;display:block}
 .bars{position:relative;display:block;width:100%;height:100%}
 .bars b{position:absolute;left:8px;bottom:8px;background:var(--teal-deep);color:var(--cream);font-size:.7rem;font-weight:800;padding:3px 7px}
 
@@ -155,6 +155,7 @@ dialog::backdrop{background:rgba(10,30,28,.85)}
 .vhead{position:sticky;top:0;z-index:2;display:flex;justify-content:flex-end;padding:10px 16px;background:var(--paper);border-bottom:2px solid var(--ink)}
 .vwrap{padding:18px 16px 30px}
 .vmedia .frame{aspect-ratio:4/3}
+.vmedia .frame:has(img){aspect-ratio:auto;min-height:0}
 .vmedia img{height:auto;max-height:70svh;object-fit:contain;background:var(--ink)}
 .vwrap h2{font-size:clamp(1.6rem,6vw,2.2rem);margin:18px 0 10px}
 .meta{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0 0 14px}
@@ -162,7 +163,18 @@ dialog::backdrop{background:rgba(10,30,28,.85)}
 .meta dd{margin:0}
 .brief{white-space:pre-line;max-width:60ch;margin:0 0 18px}
 .extra-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0 20px}
-.extra{width:100%;aspect-ratio:4/3;height:auto;object-fit:cover;display:block;background:var(--card);border:1px solid var(--ink)}
+.extra{width:100%;aspect-ratio:4/3;height:auto;object-fit:contain;display:block;background:var(--card);border:1px solid var(--ink)}
+.vmedia img,.extra{cursor:zoom-in}
+#lightbox{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;padding:20px;border:0;background:rgba(10,16,15,.96);color:var(--cream)}
+#lightbox::backdrop{background:rgba(10,16,15,.96)}
+.lightbox-layout{width:100%;height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr) auto;align-items:center;justify-items:center;gap:12px}
+.lightbox-close{grid-column:1/-1;justify-self:end}
+#lightbox-image{grid-column:2;grid-row:2;width:100%;height:100%;min-height:0;object-fit:contain}
+.lightbox-count{grid-column:1/-1;margin:0}
+#lightbox-previous{grid-column:1;grid-row:2}
+#lightbox-next{grid-column:3;grid-row:2}
+.lightbox-layout .btn:disabled{opacity:.45;cursor:not-allowed}
+@media (max-width:520px){#lightbox{padding:12px}.lightbox-layout{grid-template-columns:auto minmax(0,1fr) auto;gap:6px}.lightbox-layout .btn{padding:9px 10px}}
 .empty{padding:24px 0}
 .hide-s{display:inline}
 @media (max-width:430px){.hide-s{display:none}#bar nav{gap:14px}}
@@ -251,6 +263,15 @@ dialog::backdrop{background:rgba(10,30,28,.85)}
 <footer class="foot" id="foot"></footer>
 
 <dialog id="viewer" aria-label="Project details"></dialog>
+<dialog id="lightbox" aria-label="Project image viewer">
+  <div class="lightbox-layout">
+    <button class="btn lightbox-close" id="lightbox-close" type="button">Close</button>
+    <button class="btn" id="lightbox-previous" type="button" aria-label="Previous image">Previous</button>
+    <img id="lightbox-image" alt="">
+    <button class="btn" id="lightbox-next" type="button" aria-label="Next image">Next</button>
+    <p class="lightbox-count" id="lightbox-count" aria-live="polite"></p>
+  </div>
+</dialog>
 <div id="themes" role="group" aria-label="Theme"></div>
 
 <script>
@@ -263,8 +284,8 @@ const SITE = {
   tagline2: "Photography, Video, Production & Direction",
   theme: "studio",
   email: "kamilatoyebi@outlook.com",
-  instagram: "DEJthedirector",            // no @
-  portrait: "",                           // e.g. "images/kamil.jpg". Empty shows a placeholder.
+  instagram: "dejthedir",                 // no @
+  portrait: "images/dej.jpg",
   logo: "",                               // e.g. "images/logo.png". Empty shows the placeholder badge.
   brands: [
     { name: "Fenmore Studios", logo: "" },
@@ -571,8 +592,8 @@ function h(tag, attrs = {}, ...kids) {
 
 const PALETTE = ["#EEE2C6", "#E5A32E", "#1F5C57", "#C23B2B", "#2E5CCF", "#20160F"];
 
-function media(p, i, label) {
-  if (p.cover) return h("img", { src: p.cover, alt: p.title, loading: "lazy" });
+function media(p, i, label, loading = "lazy") {
+  if (p.cover) return h("img", { src: p.cover, alt: p.title, loading, decoding: "async" });
   const n = PALETTE.length;
   const stops = PALETTE.map((_, k) => PALETTE[(k + i) % n])
     .map((c, k) => `${c} ${(k * 100) / n}% ${((k + 1) * 100) / n}%`).join(",");
@@ -602,7 +623,7 @@ function buildHero() {
       class: "tile", type: "button", "aria-label": "Open " + p.title,
       style: `--x:${s.x}%;--y:${s.y}%;--w:${s.w}px;--r:${s.r}deg;--d:${s.d}s`,
       onclick: () => openProject(p)
-    }, h("span", { class: "frame" }, media(p, PROJECTS.indexOf(p), "photo")), h("span", { class: "cap" }, p.title)));
+    }, h("span", { class: "frame" }, media(p, PROJECTS.indexOf(p), "photo", "eager")), h("span", { class: "cap" }, p.title)));
   });
 }
 
@@ -613,7 +634,7 @@ function buildMarquee() {
   const half = [];
   while (half.length < 10) brands.forEach(b => half.push(b));
   [...half, ...half].forEach(b => $("#track").append(
-    h("span", {}, b.logo ? h("img", { src: b.logo, alt: b.name }) : b.name)));
+    h("span", {}, b.logo ? h("img", { src: b.logo, alt: b.name, loading: "lazy", decoding: "async" }) : b.name)));
   $("#track").style.animationDuration = half.length * 8 + "s";
 }
 
@@ -643,21 +664,85 @@ function renderWork() {
 
 /* project viewer */
 const viewer = $("#viewer");
+const lightbox = $("#lightbox");
+const lightboxImage = $("#lightbox-image");
+const lightboxCount = $("#lightbox-count");
+const lightboxPrevious = $("#lightbox-previous");
+const lightboxNext = $("#lightbox-next");
+let lightboxItems = [];
+let lightboxIndex = 0;
+let lightboxTrigger = null;
+
+function showLightboxImage() {
+  const item = lightboxItems[lightboxIndex];
+  lightboxImage.src = item.src;
+  lightboxImage.alt = item.alt;
+  lightboxCount.textContent = `${lightboxIndex + 1} of ${lightboxItems.length}`;
+  lightboxPrevious.disabled = lightboxIndex === 0;
+  lightboxNext.disabled = lightboxIndex === lightboxItems.length - 1;
+}
+
+function openLightbox(image) {
+  lightboxItems = [...viewer.querySelectorAll(".vmedia img, .extra")].map(img => ({
+    src: img.currentSrc || img.src,
+    alt: img.alt
+  }));
+  lightboxIndex = [...viewer.querySelectorAll(".vmedia img, .extra")].indexOf(image);
+  if (lightboxIndex < 0 || !lightboxItems.length) return;
+  lightboxTrigger = image;
+  showLightboxImage();
+  lightbox.showModal();
+  lightboxClose.focus();
+}
+
+const lightboxClose = $("#lightbox-close");
+lightboxClose.addEventListener("click", () => lightbox.close());
+lightboxPrevious.addEventListener("click", () => {
+  if (lightboxIndex === 0) return;
+  lightboxIndex--;
+  showLightboxImage();
+});
+lightboxNext.addEventListener("click", () => {
+  if (lightboxIndex >= lightboxItems.length - 1) return;
+  lightboxIndex++;
+  showLightboxImage();
+});
+lightbox.addEventListener("click", e => { if (e.target === lightbox) lightbox.close(); });
+lightbox.addEventListener("close", () => {
+  lightboxTrigger?.focus();
+  lightboxTrigger = null;
+});
+lightbox.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft" && !lightboxPrevious.disabled) lightboxPrevious.click();
+  if (e.key === "ArrowRight" && !lightboxNext.disabled) lightboxNext.click();
+});
 
 function openProject(p) {
   const meta = [["Client", p.client], ["Role", p.role], ["Year", p.year]].filter(m => m[1]);
   viewer.replaceChildren(
     h("div", { class: "vhead" }, h("button", { class: "btn", type: "button", onclick: () => viewer.close() }, "Close")),
     h("div", { class: "vwrap" },
-      h("div", { class: "vmedia" }, h("span", { class: "frame" }, media(p, PROJECTS.indexOf(p)))),
+      h("div", { class: "vmedia" }, h("span", { class: "frame" }, media(p, PROJECTS.indexOf(p), undefined, "eager"))),
       h("h2", {}, p.title),
       meta.length ? h("dl", { class: "meta" }, meta.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])) : null,
       h("p", { class: "brief" }, p.brief || "Details coming soon."),
       p.images && p.images.length ? h("div", { class: "extra-gallery", "aria-label": p.title + " gallery" },
-        p.images.map(src => h("img", { class: "extra", src, alt: p.title + " photo", loading: "lazy" }))) : null,
+        p.images.map(src => h("img", { class: "extra", src, alt: p.title + " photo", loading: "lazy", decoding: "async" }))) : null,
       p.link ? h("a", { class: "btn", href: p.link, target: "_blank", rel: "noopener" }, p.linkLabel || "See the original post") : null
     )
   );
+  viewer.querySelectorAll(".vmedia img, .extra").forEach((image, index, images) => {
+    image.tabIndex = 0;
+    image.setAttribute("role", "button");
+    image.setAttribute("aria-label", `View image ${index + 1} of ${images.length} for ${p.title}`);
+    image.addEventListener("click", () => openLightbox(image));
+    image.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openLightbox(image);
+      }
+    });
+  });
   viewer.showModal();
   viewer.scrollTop = 0;
 }
@@ -688,7 +773,7 @@ function buildStatic() {
   $("#tagline2").textContent = SITE.tagline2;
   $("#aboutText").replaceChildren(...SITE.about.map(t => h("p", {}, t)));
   $("#portrait").replaceChildren(SITE.portrait
-    ? h("img", { src: SITE.portrait, alt: "Dej" })
+    ? h("img", { src: SITE.portrait, alt: "Portrait of Dej", loading: "lazy", decoding: "async" })
     : media({ title: "Portrait" }, 2, "your photo goes here"));
   
   // Email template with pre-filled subject and body
@@ -698,11 +783,11 @@ function buildStatic() {
   $("#mail").textContent = SITE.email;
 
   // Direct Instagram Link
-  $("#ig").href = "https://www.instagram.com/dejthedir/" + SITE.instagram;
+  $("#ig").href = `https://www.instagram.com/${SITE.instagram}/`;
   $("#ig").textContent = "@" + SITE.instagram;
 
   // WhatsApp Direct Link with template message (replace with your phone number, e.g., 234...)
-  const waNumber = "234912652023"; // Update with your actual WhatsApp number including country code
+  const waNumber = "2349121652023";
   const waText = encodeURIComponent("Hi Dej, I'm reaching out from your portfolio website regarding a project booking.");
   $("#wa").href = `https://wa.me/${waNumber}?text=${waText}`;
 
